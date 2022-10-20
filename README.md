@@ -9,11 +9,11 @@ You should in MVP version be able to share those boolean through UDP message or 
 Fork this project if you need other connection in or better code ;) .
 
 ----------------
-About Me:
-https://github.com/EloiStree/  
-Support my works 💰🪙:  
-https://en.tipeee.com/eloistree/ 
-Support my lifetime project OMI 💰🪙:  
-https://en.tipeee.com/omi/  
-License:  
-eloistree.page.link/license
+About Me:  
+https://github.com/EloiStree/    
+Support my works 💰🪙:    
+https://en.tipeee.com/eloistree/     
+Support my lifetime project OMI 💰🪙:    
+https://en.tipeee.com/omi/    
+License:    
+https://eloistree.page.link/license  

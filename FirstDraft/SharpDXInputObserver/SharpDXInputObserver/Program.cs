@@ -1,57 +1,19 @@
 ﻿using SharpDX.DirectInput;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 
 namespace SharpDXInputObserver
 {
 
-    public class UserGUID2BooleanCollection {
-
-        public UserGUIDBool2Boolean[] m_booleanListener = new UserGUIDBool2Boolean[] {        };
-        public UserGUIDFloat2Boolean[] m_floatListener = new UserGUIDFloat2Boolean[] {     };
-    }
-
-    public class UserGUIDBool2Boolean {
-        public string m_deviceGuid;
-        public string m_booleanName;
-        public int m_buttonId;
-        public bool m_valueLookedFor=true;
-    }
-    public class UserGUIDFloat2Boolean {
-        public string m_deviceGuid;
-        public string m_booleanName;
-        public string m_floatName;
-        public float m_minValuePercent=0.1f;
-        public float m_maxValuePercent=1f;
-        public bool m_inverseBoolean;
-        public int m_floatMaxValue=65535;
-    }
-
-    public class DictionaryFetch
-    {
-        public  DictionaryFetch(in DirectInput input) {
-            m_directInput = input;
-        }
-
-        public DirectInput m_directInput;
-        public Dictionary<string, GuidJoystickKey > m_joystickRegister = new Dictionary<string, GuidJoystickKey>();
-  
-        public void ListenToGuidDevice(string guidId)
-        {
-            if (!m_joystickRegister.ContainsKey(guidId)) {
-                m_joystickRegister.Add(guidId, new GuidJoystickKey(guidId, new Joystick(m_directInput, new Guid(guidId))));
-            }
-        }
-        public void GetListOfTracked(out List<string> guidKey) { guidKey = m_joystickRegister.Keys.ToList(); }
-        public void GetListOfTracked(out List<GuidJoystickKey> joystick) { joystick = m_joystickRegister.Values.ToList(); }
-    }
-
     class Program
     {
         static void Main(string[] args)
         {
+
+            //UdpCommandPusher    udpPush     = new UdpCommandPusher(2503);
+            //MemoryCommandPusher memoryPush  = new MemoryCommandPusher("DirectInput2Boolean");
+
             bool useDebug_RawValueObserved = true;
             bool useDebug_RawValueObservedFrame = false;
             UserGUID2BooleanCollection userInput = new UserGUID2BooleanCollection();
@@ -169,7 +131,14 @@ namespace SharpDXInputObserver
                                 && pct <= floatValue.m_maxValuePercent ;
                             if (useDebug_RawValueObservedFrame)
                                 Console.WriteLine(string.Format("TB: {0} | {1}", isTrue, id));
-                            boolRegister.PushValue(floatValue.m_booleanName, floatValue.m_inverseBoolean  ?!isTrue: isTrue);
+                            bool realBool = floatValue.m_inverseBoolean ? !isTrue : isTrue;
+                            boolRegister.PushValue(floatValue.m_booleanName, realBool);
+
+                            string cmd = "ᛒ" + (realBool ? 1 : 0) + floatValue.m_booleanName;
+                            //udpPush.PushCommand(cmd);
+                            //memoryPush.PushCommand(cmd);
+
+
                         }
                     }
                 }
@@ -193,89 +162,5 @@ namespace SharpDXInputObserver
         }
 
        
-    }
-}
-
-public class NamedBooleanChangeObserver {
-
-    public Dictionary<string, bool> m_namedBoolean = new Dictionary<string, bool> ();
-    public delegate void OnBooleanChanged(in string name,in  bool newValue);
-    public OnBooleanChanged m_onBooleanChanged;
-    public void PushValue(in string name, in bool value) {
-        if (!m_namedBoolean.ContainsKey(name))
-        {
-            m_namedBoolean.Add(name, value);
-            if (m_onBooleanChanged != null)
-                m_onBooleanChanged(in name, in value);
-        }
-        else {
-            bool current = m_namedBoolean[name];
-            if (current != value) {
-                m_namedBoolean[name] = value;
-                if (m_onBooleanChanged != null)
-                    m_onBooleanChanged(in name, in value);
-            }
-        }
-
-    }
-}
-
-public class GuidJoystickKey
-{
-    public string m_guid;
-    public Joystick m_joystick;
-    public GuidJoystickKey(string guid, Joystick joystick)
-    {
-        m_guid = guid;
-        m_joystick = joystick;
-    }
-}
-
-public class GuidOffsetValureDictionary
-{
-    public Dictionary<string, Value> m_valueHolder = new Dictionary<string, Value>();
-    public class Value
-    {
-        public string m_guid;
-        public int m_value;
-        public int m_rawOffset;
-    }
-
-    public void SetWith(in string target, in JoystickOffset offset, in int value, in int rawOffset)
-    {
-        ProjectTempUtility. GetIdFrom(in target, in offset, out string id);
-        if (!m_valueHolder.ContainsKey(id))
-            m_valueHolder.Add(id, new Value() { m_guid = id});
-        m_valueHolder[id].m_value = value;
-        m_valueHolder[id].m_rawOffset = rawOffset;
-    }
-}
-
-
-public class ProjectTempUtility {
-    public static void GetIdFrom(in string guid, in JoystickOffset offset, out string id) { id = guid + "_" + offset; }
-
-
-    public static IEnumerable<T> GetEnum<T>()
-    {
-
-        return Enum.GetValues(typeof(T)).Cast<T>();
-    }
-
-    public static void GetEnumOfStringJoystickOffset(string id, out bool converted, out JoystickOffset value)
-    {
-        converted = Enum.TryParse<JoystickOffset>(id, true, out value);
-
-    }
-    public static void GetEnumOfStringJoystickOffset(int buttonId0To127, out bool converted, out JoystickOffset value)
-    {
-        if (buttonId0To127 > 127) {
-            converted = false;
-            value = JoystickOffset.Buttons127;
-            return;
-        }
-        buttonId0To127 += 48;
-        value = (JoystickOffset)buttonId0To127;
-        converted = true;
     }
 }

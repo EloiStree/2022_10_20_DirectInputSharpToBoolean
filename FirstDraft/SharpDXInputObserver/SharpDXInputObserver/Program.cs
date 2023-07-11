@@ -12,7 +12,7 @@ using static NamedBooleanChangeObserver;
 namespace SharpDXInputObserver
 {
 
-    class Program
+    public class Program
     {
 
         public static AppConfigurationJson defaultDemoConfig = new AppConfigurationJson()
@@ -68,11 +68,20 @@ namespace SharpDXInputObserver
             }
         };
 
+        public static float GetTimeOfDebuglog() { return userConfig.m_secondFrequenceOfFullDebug; }
         public static AppConfigurationJson userConfig;
         public static DirectInput directInput;
 
         static void Main(string[] args)
         {
+
+            /// TO DO LATER
+            /// - Add an boolean observer of target device to debug more easily what device and button we want to change
+            /// - Add a float oversver with death zone to conver to event of significant change on a device observed.
+            /// - Add compatibility with infini mouse like the 3D connect that increase all time that convert with the software to classic joystick.
+
+
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
 
             Console.WriteLine("Hello and welcome.");
             Console.WriteLine("This tool is design to allows convertion of DirectInput to boolean value.");
@@ -83,29 +92,24 @@ namespace SharpDXInputObserver
             Console.WriteLine("Source code: https://github.com/EloiStree/2022_10_20_DirectInputSharpToBoolean");
             Console.WriteLine("---------------");
 
+            Console.WriteLine("---------------");
+
             //UdpCommandPusher    udpPush     = new UdpCommandPusher(2503);
             //MemoryCommandPusher memoryPush  = new MemoryCommandPusher("DirectInput2Boolean");
 
             bool useDebug_RawValueButtonObserved = false;
             bool useDebug_RawValueObservedFrame = false;
 
-            userConfig = defaultDemoConfig;
-            string path = Directory.GetCurrentDirectory() + "/Config.json";
-            Console.WriteLine("Config path: " + path);
-            if (!File.Exists(path))
-            {
-                string save = JsonConvert.SerializeObject(userConfig,Formatting.Indented);
-                File.WriteAllText(path, save);
-            }
-            if (File.Exists(path)) {
-                userConfig = JsonConvert.DeserializeObject<AppConfigurationJson>(File.ReadAllText(path));
-            }
+            LoadConfigJson();
 
-            UserGUID2BooleanCollection userInput = new UserGUID2BooleanCollection() {
+            LoadDirectInput2BooleanFile();
+
+            UserGUID2BooleanCollection userInput = new UserGUID2BooleanCollection()
+            {
                 m_booleanListener = userConfig.m_booleanIndexObserved,
                 m_floatListener = userConfig.m_floatIndexObserved
             };
-            
+
 
             directInput = new DirectInput();
             DictionaryFetch fetch = new DictionaryFetch(in directInput);
@@ -133,20 +137,30 @@ namespace SharpDXInputObserver
 
             GuidOffsetValureDictionary valueDictionary = new GuidOffsetValureDictionary();
             NamedBooleanChangeObserver boolRegister = new NamedBooleanChangeObserver();
-            boolRegister.m_onBooleanChanged += (in string t, in bool d) => {
-                if(userConfig.m_useDebugOfBoolChanged)
+            boolRegister.m_onBooleanChanged += (in string t, in bool d) =>
+            {
+                if (userConfig.m_useDebugOfBoolChanged)
                     Console.WriteLine(string.Format("Changed: {0} {1}", t, d));
-                string cmd = "bool:"+ t+":" + (d ? "True" : "False")  ;
+                string cmd = "bool:" + t + ":" + (d ? "True" : "False");
                 PushCommand(userConfig.m_targetIps, cmd);
             };
 
             DisplayStateLogOfDevices(directInput, userConfig.m_fullDebugDeviceId);
 
-            if (userConfig.m_useFullDebugger) {
-                Thread backgroundThread = new Thread(DebugLogOfTrackDevice);
+            if (userConfig.m_useFullDebugger)
+            {
+                Thread backgroundThread = new Thread(()=> {
+                    DebugLogOfTrackDevice(userConfig.m_secondFrequenceOfFullDebug);
+                }
+                );
                 backgroundThread.IsBackground = true;
                 backgroundThread.Start();
             }
+
+            Console.WriteLine("##############################");
+            Console.WriteLine("Final Choosed Preference:");
+            Console.WriteLine(JsonConvert.SerializeObject(userConfig, Formatting.Indented));
+            Console.WriteLine("##############################");
 
             // Poll events from joystick
             while (true)
@@ -155,20 +169,23 @@ namespace SharpDXInputObserver
                 {
                     joystick.m_joystick.Poll();
                     var datas = joystick.m_joystick.GetBufferedData();
-                    foreach (var state in datas) {
-                        if (useDebug_RawValueButtonObserved) { 
+                    foreach (var state in datas)
+                    {
+                        if (useDebug_RawValueButtonObserved)
+                        {
                             Console.WriteLine(string.Format("{0} | Value {1} | Offset{2}",
                             state.Offset, state.Value, state.RawOffset));
                         }
-                        valueDictionary.SetWith(in joystick.m_guid,  state.Offset,  state.Value,  state.RawOffset);
+                        valueDictionary.SetWith(in joystick.m_guid, state.Offset, state.Value, state.RawOffset);
                     }
                 }
-               
+
                 foreach (var floatValue in userInput.m_booleanListener)
                 {
                     ProjectTempUtility.GetEnumOfStringJoystickOffset(
                         floatValue.m_buttonId, out bool converted, out JoystickOffset offset);
-                    if (converted) {
+                    if (converted)
+                    {
                         ProjectTempUtility.GetIdFrom(in floatValue.m_deviceGuid, offset, out string id);
 
                         if (valueDictionary.m_valueHolder.ContainsKey(id))
@@ -178,7 +195,7 @@ namespace SharpDXInputObserver
                                 Console.WriteLine(string.Format("TB: {0} | {1}", isTrue, id));
                             boolRegister.PushValue(floatValue.m_booleanName, isTrue == floatValue.m_valueLookedFor);
                         }
-                    } 
+                    }
                 }
                 foreach (var floatValue in userInput.m_floatListener)
                 {
@@ -189,29 +206,121 @@ namespace SharpDXInputObserver
                         ProjectTempUtility.GetIdFrom(in floatValue.m_deviceGuid, offset, out string id);
                         if (valueDictionary.m_valueHolder.ContainsKey(id))
                         {
-                            float pct = valueDictionary.m_valueHolder[id].m_value / (float)floatValue. m_floatMaxValue;
+                            float pct = valueDictionary.m_valueHolder[id].m_value / (float)floatValue.m_floatMaxValue;
                             bool isTrue = pct >= floatValue.m_minValuePercent
-                                && pct <= floatValue.m_maxValuePercent ;
+                                && pct <= floatValue.m_maxValuePercent;
                             if (useDebug_RawValueObservedFrame)
                                 Console.WriteLine(string.Format("TB: {0} | {1}", isTrue, id));
                             bool realBool = floatValue.m_inverseBoolean ? !isTrue : isTrue;
                             boolRegister.PushValue(floatValue.m_booleanName, realBool);
 
-                           
-                            
+
+
 
                         }
                     }
                 }
-
+                DisplayConnection(directInput);
                 Thread.Sleep(1);
             }
         }
 
-        private static void DebugLogOfTrackDevice(object obj)
+        private static void LoadDirectInput2BooleanFile()
+        {
+            //userConfig = defaultDemoConfig;
+            string path = Directory.GetCurrentDirectory();
+            string [] files = Directory.GetFiles(path, ".directinput2boolean", SearchOption.AllDirectories);
+
+            List<UserGUIDFloat2Boolean> floatTracked = new List<UserGUIDFloat2Boolean>();
+            List<UserGUIDBool2Boolean> boolTracked = new List<UserGUIDBool2Boolean>();
+
+            foreach (var file in files)
+            {
+                string fileText = File.ReadAllText(file);
+                string[] lines = fileText.Split("\n");
+                foreach (var line in lines)
+                {
+                    string linetime = line.Trim();
+                       
+                    if ((linetime.Length>1&&linetime[0] == '/' && linetime[1] == '/') || (linetime.Length > 0 && linetime[0]== '#') ) {
+                        continue;
+                    }
+                    string[] tokens = line.Split("♦");
+
+                    if (tokens.Length >= 2) { 
+                        
+                        string deviceId = tokens[0].Trim();
+                        string targetBoolean = tokens[1].Trim();
+                        string targetInput = tokens[2].Trim();
+                        if (int.TryParse(targetInput, out int buttonIndex))
+                        {
+                            bool useInverse = false;
+                            if (tokens.Length >= 4)
+                                useInverse = tokens[3].ToLower().IndexOf("inverse")>0;
+                            boolTracked.Add(new UserGUIDBool2Boolean()
+                            {
+                                m_booleanName = targetBoolean,
+                                m_buttonId = buttonIndex,
+                                m_deviceGuid = deviceId,
+                                m_valueLookedFor = useInverse ? false : true
+                            });
+                        }
+                        else {
+
+                            float min = 0;
+                            float max = 1.0f;
+                            int limit = 65535;
+                            bool useInverse = false;
+                            if (tokens.Length >= 4) float.TryParse(tokens[3], out min);
+                            if (tokens.Length >= 5) float.TryParse(tokens[4], out max);
+                            if (tokens.Length >= 6) int.TryParse(tokens[5], out limit);
+                            if (tokens.Length >= 7) {
+                                    useInverse = tokens[6].ToLower().IndexOf("inverse") > 0;
+                            }
+
+                            floatTracked.Add(new UserGUIDFloat2Boolean()
+                            {
+                                m_deviceGuid = deviceId,
+                                m_booleanName = targetBoolean,
+                                m_floatName = targetInput,
+                                m_minValuePercent = min,
+                                m_maxValuePercent = max,
+                                m_floatMaxValue = limit,
+                                m_inverseBoolean = useInverse 
+                            });
+                        }
+                    }
+
+                }
+
+            }
+
+            userConfig.m_booleanIndexObserved = userConfig.m_booleanIndexObserved.Concat(boolTracked).ToArray();
+            userConfig.m_floatIndexObserved = userConfig.m_floatIndexObserved.Concat(floatTracked).ToArray();
+
+        }
+
+        private static void LoadConfigJson()
+        {
+            userConfig = defaultDemoConfig;
+            string path = Directory.GetCurrentDirectory() + "/Config.json";
+            Console.WriteLine("Config path: " + path);
+            if (!File.Exists(path))
+            {
+                string save = JsonConvert.SerializeObject(userConfig, Formatting.Indented);
+                File.WriteAllText(path, save);
+            }
+            if (File.Exists(path))
+            {
+                userConfig = JsonConvert.DeserializeObject<AppConfigurationJson>(File.ReadAllText(path));
+            }
+        }
+
+        private static void DebugLogOfTrackDevice(float timeToBetweenFrame)
         {
 
-            int timeToWait =(int)( userConfig.m_secondFrequenceOfFullDebug*1000f);
+            int timeToWait =(int)(timeToBetweenFrame * 1000f);
+           Console.WriteLine("Timee" + timeToWait);
             while (true) { 
                 
                 DisplayStateLogOfDevices(directInput, userConfig.m_fullDebugDeviceId);
@@ -248,12 +357,12 @@ namespace SharpDXInputObserver
 
 
                     udpClient.Send(data, data.Length);// ep);
-                    Console.Write("Sent " + message+" to " +ipAddress+":"+port);
+                    Console.WriteLine("Sent " + message+" to " +ipAddress+":"+port);
                 }
             }
             catch (Exception ex)
             {
-                Console.Write("Error: " + ex.Message);
+                Console.WriteLine("Error: " + ex.Message);
             }
 
         }
@@ -269,6 +378,57 @@ namespace SharpDXInputObserver
                     Console.WriteLine(" " + item.ToString() + ", " + deviceInstance.InstanceName + ": " + deviceInstance.InstanceGuid);
 
                 }
+            }
+        }
+        public static Dictionary<string, IDAndDevice> deviceId = new Dictionary<string, IDAndDevice>();
+        public static Dictionary<string, IDAndDevice> deviceIdPerma = new Dictionary<string, IDAndDevice>();
+        public static  string[] m_currentPort= new string[0];
+        public static  string[] m_previousPort = new string[0];
+        public static  string[] m_newPort = new string[0];
+        public static  string[] m_lostPort = new string[0];
+
+        public struct IDAndDevice {
+
+            public string m_id;
+            public string m_name;
+
+            public IDAndDevice(string instanceName, string instanceGuid) : this()
+            {
+                this.m_name = instanceName;
+                this.m_id = instanceGuid;
+            }
+        }
+
+       
+        private static void DisplayConnection(DirectInput directInput)
+        {
+            deviceId.Clear();
+            foreach (var item in ProjectTempUtility.GetEnum<DeviceType>())
+            {
+                foreach (var deviceInstance in directInput.GetDevices(item,
+                        DeviceEnumerationFlags.AllDevices))
+                {
+                    string id = deviceInstance.InstanceGuid.ToString();
+                    if (!deviceIdPerma.ContainsKey(id)){
+                        deviceIdPerma.Add(id, new IDAndDevice(deviceInstance.InstanceName, id));
+                    }
+                    deviceId.Add(id, deviceIdPerma[id] );
+
+                }
+            }
+            m_previousPort = m_currentPort.ToArray();
+            m_currentPort = deviceId.Values.Select(k=>k.m_id).ToArray();
+            m_newPort = (m_currentPort.ToArray().Except(m_previousPort)).ToArray();
+            m_lostPort = (m_previousPort.ToArray().Except(m_currentPort)).ToArray();
+
+            foreach (var item in m_newPort)
+            {
+                Console.WriteLine("New device: " + deviceIdPerma[item].m_id + " " + deviceIdPerma[item].m_name);
+
+            }
+            foreach (var item in m_lostPort)
+            {
+                Console.WriteLine("Lost device: " + deviceIdPerma[item].m_id + " " + deviceIdPerma[item].m_name);
             }
         }
         private static void DisplayStateLogOfDevices(DirectInput directInput, string[] deviceId)
